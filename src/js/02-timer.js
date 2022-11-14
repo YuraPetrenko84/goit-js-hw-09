@@ -3,95 +3,147 @@ import "flatpickr/dist/flatpickr.min.css";
 import { Notify } from 'notiflix/build/notiflix-notify-aio';
 
 const refs = {
-    input: document.querySelector('#datetime-picker'),
-    startBtn: document.querySelector('button[data-start]'),
-}
+  startBtn: document.querySelector('button'),
+  clockFace: document.querySelector('.timer')
+} 
+
+let selectedDate = null;
+let isActive = false;
+let intervalId = null;
 
 
 
+// Об'єкт налаштувань для flatpickr
 const options = {
   enableTime: true,
   time_24hr: true,
-  defaultDate: new Date(),
+  defaultDate: Date.now(),
   minuteIncrement: 1,
+
+  // Функція яка виконається при закритті вікна flatpickr
   onClose(selectedDates) {
-      if (selectedDates[0].getTime() < Date.now()) {
-          onDisableStartBtn();
-          Notify.failure("Please choose a date in the future", {
-              position: 'center-center',
-              backOverlay: true,
-              clickToClose: true,
-              closeButton: true,
-          });
-      }else {onEnableStartBtn();}
-            
+    // Перевіряємо чи вибрана дата в минулому
+    if (selectedDates[0] < Date.now()) {
+      console.log('Please choose a date in the future');
+      // Підключаємо плагін notiflix із сповіщеннями,
+      // другим параметром передаємо об'єкт налаштувань
+      Notify.failure('Please choose a date in the future', {
+        position: "center-top",
+        clickToClose: true,
+        closeButton: true,
+        useIcon: false,
+        backOverlayClickToClose: true,
+        timeout: 1000,
+        fontSize: 20,
+        background:'#a85d5d'
+      });
+      refs.startBtn.disabled = true;
+      return
+    }
+
+    // Виконуємо якщо дата вибрана в майбутньому
+    refs.startBtn.disabled = false;
+    selectedDate = selectedDates[0];
+    return selectedDate
   },
 };
-flatpickr(refs.input, options);
 
 
-const onEnableStartBtn = () => refs.startBtn.disabled = false;
-const onDisableStartBtn = () => refs.startBtn.disabled = true;
-const onEnableInput = () => refs.input.disabled = false;
-const onDisableInput = () => refs.input.disabled = true;
+// Ініціалізуємо плагін flatpickr на інпуті
+flatpickr('#datetime-picker',options)
 
-onDisableStartBtn();
+// Функція запуску таймера
+function startTimer() {
+// перевіряємо чи був запущений таймер
+  if (isActive) {
+    console.log('Інтервал вже був запущений');
+    return;
+  };
 
+// Якщо не запущений то запускаємо
+  isActive = true;
+  refs.startBtn.disabled = true;
+  intervalId = setInterval(() => {
 
-const timer = {
-    intervalId: null,
-    refs: {
-        days: document.querySelector('[data-days]'),
-        hours: document.querySelector('[data-hours]'),
-        minutes: document.querySelector('[data-minutes]'),
-        seconds: document.querySelector('[data-seconds]'),
-},
-    start() {
-        const startTime = this.getStartTime();
-        this.intervalId = setInterval(() => {
-            const delta = startTime - Date.now();
-            const data = this.convertMs(delta);
-            
-
-            Object.entries(data).forEach(([name, value]) => {
-                this.refs[name].textContent = this.addLeadingZero(value);
-            });
-
-            if (delta < 1000) {
-                clearInterval(this.intervalId)
-                onEnableInput();
-            }
-        }, 1000);
-        
-        onDisableStartBtn();
-        onDisableInput();
-    },
-
-    getStartTime() {
-        let date = new Date(refs.input.value);
-        const onDateInput = () => {
-            date = new Date(refs.input.value);
-        }
-        refs.input.addEventListener('input', onDateInput)
-        return date.getTime();
-    },
+// оприділяємо поточний час на момент виконання інтервалу(кожну секунду буде інший)
+    const currentTime = Date.now();
     
 
-    convertMs(ms) {
-        const days = Math.floor(ms / (((1000 * 60) * 60) * 24));
-        const hours = Math.floor((ms % (((1000 * 60) * 60) * 24)) / ((1000 * 60) * 60));
-        const minutes = Math.floor(((ms % (((1000 * 60) * 60) * 24)) % ((1000 * 60) * 60)) / (1000 * 60));
-        const seconds = Math.floor((((ms % (((1000 * 60) * 60) * 24)) % ((1000 * 60) * 60)) % (1000 * 60)) / 1000);
+// рахуємо різницю між стартовим часом і поточним (в даному інтервалі)
+    let deltaTime = selectedDate - currentTime;
+       if (deltaTime < 1000) {
+      console.log('Акція закінчилася');
+      Notify.success('Акція закінчилася', {
+        position: "center-top",
+        // backOverlay: false,
+        clickToClose: true,
+        closeButton: true,
+        useIcon: false,
+        backOverlayClickToClose: true,
+        timeout: 1000,
+        fontSize: 20,
+        background:'#5da85d'
+      });
+      clearInterval(intervalId);
+      // таймер зависає на 1 секунді,
+      // щоб цього уникнути обнулюємо 
+      updateClockFace(convertMs(0));
+      console.log('Встановлено 00:00:00');
+      return
+}
+// Конвертуємо мілісекунди в дні години хвилини секунди
+   const time = convertMs(deltaTime);
+    console.log(time);
+      
+// повертаємо значення на сторінку
+    updateClockFace(time);
+        
+  }, 1000)
+};
 
-        return { days, hours, minutes, seconds };
-    },
 
-    addLeadingZero(value) {
-        return String(value).padStart(2, '0');
-    }
+function pad(value) {
+return String(value).padStart(2,'0') 
 }
 
-refs.startBtn.addEventListener('click', timer.start.bind(timer));
+// Функція конвертації мілісекунд в дні години хвилини секунди
+function convertMs(ms) {
+  const second = 1000;
+  const minute = second * 60;
+  const hour = minute * 60;
+  const day = hour * 24;
+
+  // Remaining days
+  const days = Math.floor(ms / day);
+  // Remaining hours
+  const hours = Math.floor((ms % day) / hour);
+  // Remaining minutes
+  const minutes = Math.floor(((ms % day) % hour) / minute);
+  // Remaining seconds
+  const seconds = Math.floor((((ms % day) % hour) % minute) / second);
+
+  return { days, hours, minutes, seconds };
+}
+
+
+// Функція повернення значень таймера на сторінку
+function updateClockFace( { days, hours, minutes, seconds }) {
+  const clockDays = refs.clockFace.querySelector('[data-days]')
+  clockDays.textContent =pad(days);
+
+  const clockHours = refs.clockFace.querySelector('[data-hours]')
+  clockHours.textContent =pad(hours);
+  
+  const clockMinutes = refs.clockFace.querySelector('[data-minutes]')
+  clockMinutes.textContent =pad(minutes);
+  
+  const clockSeconds = refs.clockFace.querySelector('[data-seconds]')
+  clockSeconds.textContent =pad(seconds);
+  
+}
+
+// Слухач подій на кнопці Start, запускає таймер
+refs.startBtn.addEventListener('click', startTimer)
 
 
 
